@@ -63,7 +63,7 @@ class MultipanelPlot(object):
                  phase_nrows=None, phase_ncols=None, uparams=None, telfmts={}, legend=True,
                  phase_limits=[], nobin=False, phasetext_size='large', rv_phase_space=0.08,
                  figwidth=7.5, fit_linewidth=2.0, set_xlim=None, text_size=9, highlight_last=False,
-                 show_rms=False, legend_kwargs=dict(loc='best'), status=None):
+                 show_rms=False, legend_kwargs=dict(loc='best'), status=None,force_nodet=False):
 
         self.post = post
         self.saveplot = saveplot
@@ -87,6 +87,7 @@ class MultipanelPlot(object):
         self.highlight_last = highlight_last
         self.show_rms = show_rms
         self.legend_kwargs = legend_kwargs
+        self.force_nodet = force_nodet
         rcParams['font.size'] = text_size
 
         if status is not None:
@@ -181,10 +182,17 @@ class MultipanelPlot(object):
             rms_values = False
 
         # plot orbit model
-        ax.plot(self.mplttimes, self.orbit_model, 'b-', rasterized=False, lw=self.fit_linewidth)
+        #ax.plot(self.mplttimes, self.orbit_model, 'k-',alpha=0.8, rasterized=False, lw=self.fit_linewidth)
 
         # plot data
-        vels = self.rawresid+self.rvmod
+        try:
+            det_sign = (max(self.periodograms[0]) > self.search.eFAPs[0])
+        except:
+            det_sign = False
+        if det_sign and not self.force_nodet:
+            vels = self.rawresid+self.rvmod
+        else:
+            vels = self.search.data['mnvel'].to_numpy()
         plot.mtelplot(
             # data = residuals + model
             self.plttimes, vels, self.rverr, self.post.likelihood.telvec, ax, telfmts=self.telfmts,
@@ -216,8 +224,11 @@ class MultipanelPlot(object):
         pl.locator_params(axis='x', nbins=5)
 
         if not self.yscale_auto: 
-            scale = np.std(self.rawresid+self.rvmod)
-            ax.set_ylim(-self.yscale_sigma * scale, self.yscale_sigma * scale)
+            scale = np.nanstd(self.rawresid+self.rvmod)
+            if np.isnan(scale):
+                ax.set_ylim(-100., 100)
+            else:
+                ax.set_ylim(-self.yscale_sigma * scale, self.yscale_sigma * scale)
 
         ax.set_ylabel('RV [{ms:}]'.format(**plot.latex), weight='bold')
         ticks = ax.yaxis.get_majorticklocs()
@@ -230,7 +241,7 @@ class MultipanelPlot(object):
         
         ax = pl.gca()
 
-        ax.plot(self.mplttimes, self.slope, 'b-', lw=self.fit_linewidth)
+        ax.plot(self.mplttimes, self.slope, 'k-',alpha=0.8, lw=self.fit_linewidth)
 
         plot.mtelplot(self.plttimes, self.resid, self.rverr, self.post.likelihood.telvec, ax, telfmts=self.telfmts)
         if not self.yscale_auto: 
@@ -286,8 +297,9 @@ class MultipanelPlot(object):
         bint -= 1.0
 
         ax.axhline(0, color='0.5', linestyle='--', )
-        ax.plot(sorted(modph), rvmod2cat[np.argsort(modph)], 'b-', linewidth=self.fit_linewidth)
-        plot.labelfig(pltletter)
+        ax.plot(sorted(modph), rvmod2cat[np.argsort(modph)], 'k-',alpha=0.8, linewidth=self.fit_linewidth)
+        if pltletter != ord(' '):
+        	plot.labelfig(pltletter)
 
         telcat = np.concatenate((self.post.likelihood.telvec, self.post.likelihood.telvec))
 
@@ -330,9 +342,13 @@ class MultipanelPlot(object):
         anotext = []
         for l, p in enumerate(print_params):
             val = self.post.params["%s%d" % (print_params[l], pnum)].value
-            
+             # LP sig figures
             if self.uparams is None:
-                _anotext = r'$\mathregular{%s}$ = %4.2f %s' % (labels[l].replace("$", ""), val, units[p])
+                if p == 'e':
+                    _anotext = r'$\mathregular{%s}$ = %4.3f %s' % (labels[l].replace("$", ""), val, units[p])
+                else:
+                    _anotext = r'$\mathregular{%s}$ = %4.1f %s' % (labels[l].replace("$", ""), val, units[p])
+                
             else:
                 if hasattr(self.post, 'medparams'):
                     val = self.post.medparams["%s%d" % (print_params[l], pnum)]
@@ -438,7 +454,7 @@ class MultipanelPlot(object):
             pltletter = ord('a')
             plot.labelfig(pltletter)
             pltletter += 1
-
+        pl.setp(ax_rv.get_xticklabels(), visible=False)
         # residuals
         ax_resid = pl.subplot(gs_rv[1, 0])
         self.ax_list += [ax_resid]
@@ -584,11 +600,11 @@ class GPMultipanelPlot(MultipanelPlot):
             ax.fill_between(xpred, gpmu+gp_orbit_model-stddev, gpmu+gp_orbit_model+stddev, 
                             color=color, alpha=0.5, lw=0
                             )
-            ax.plot(xpred, gpmu+gp_orbit_model, 'b-', rasterized=False, lw=0.1)
+            ax.plot(xpred, gpmu+gp_orbit_model, 'k-',alpha=0.8, rasterized=False, lw=0.1)
 
         else:
             # plot orbit model
-            ax.plot(self.mplttimes, self.orbit_model, 'b-', rasterized=False, lw=0.1)
+            ax.plot(self.mplttimes, self.orbit_model, 'k-',alpha=0.8, rasterized=False, lw=0.1)
 
         if not self.yscale_auto: 
             scale = np.std(self.rawresid+self.rvmod)
